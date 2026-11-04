@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Preference Elicitation - Prolific</title>
+    <script src="https://unpkg.com/jspsych@7.3.3"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-button-response@1.1.2"></script>
+    <script src="https://unpkg.com/@jspsych/plugin-html-slider-response@1.1.2"></script>
+    <!-- הוספנו כאן את הפלאגין של DataPipe -->
+    <script src="/config.js"></script>
+    <link href="https://unpkg.com/jspsych@7.3.3/css/jspsych.css" rel="stylesheet" type="text/css" />
+    <style>
+        body { background-color: #f4f4f4; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .lottery-wrapper { border: 2px solid #ccc; border-radius: 10px; padding: 20px; width: 300px; background-color: white; box-sizing: border-box; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .lottery-title { font-weight: bold; font-size: 18px; margin-bottom: 15px; color: #555; text-align: center;}
+        .bar-container { display: flex; width: 100%; height: 50px; border-radius: 5px; overflow: hidden; margin-bottom: 10px; box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); border: 1px solid #999; }
+        .bar-win { background-color: #777; display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 16px; }
+        .bar-lose { background-color: #ddd; display: flex; align-items: center; justify-content: center; color: #333; font-weight: bold; font-size: 16px; }
+        .prob-labels { display: flex; width: 100%; font-size: 14px; font-weight: bold; color: #333; }
+        .container { display: flex; justify-content: center; gap: 40px; margin: 20px 0; }
+        .instructions { max-width: 800px; margin: 0 auto; text-align: left; font-size: 18px; line-height: 1.6; padding: 20px;}
+        .consent-box { max-width: 800px; margin: 0 auto; text-align: left; font-size: 14px; line-height: 1.5; padding: 20px; background: white; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        
+        .custom-btn-container { display: flex; justify-content: center; gap: 40px; margin-top: 5px; }
+        .custom-choice-btn { width: 300px; padding: 12px; font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 4px; border: 1px solid #ccc; background-color: #fff; }
+        .custom-choice-btn:hover { background-color: #e9e9e9; }
+        
+        .slider-value-display { font-size: 24px; font-weight: bold; color: #333; margin: 10px 0; }
+        .bdm-slider-labels { display: flex; justify-content: space-between; margin-top: 10px; font-weight: bold; font-size: 16px; width: 100%; }
+        
+        /* Precision alignment for the BDM slider ticks */
+        .bdm-slider-ticks { display: flex; justify-content: space-between; width: 100%; padding: 0 12px; box-sizing: border-box; pointer-events: none; color: #666; font-size: 12px; margin-top: 5px; }
+        .bdm-slider-ticks span { display: flex; flex-direction: column; align-items: center; width: 20px; margin-left: -10px; margin-right: -10px; }
+        .bdm-slider-ticks span::before { content: ''; display: block; width: 2px; height: 8px; background-color: #999; margin-bottom: 2px; }
+        
+        /* Force slider wrapper to match exact width of the 2 lotteries + gap (300+300+40 = 640px) */
+        #jspsych-html-slider-response-wrapper { margin-bottom: 50px; max-width: 640px; width: 100% !important; margin-left: auto; margin-right: auto; }
+    </style>
+</head>
+<body>
+<script>
+    // Variables to track comprehension check failures
+    let bonus_summary_html = '';
+    let cc1_fails = 0;
+    let cc2_fails = 0;
+
+    // הפונקציה הזו מייצרת את מבנה ה-CSV הייחודי של ורד בדיוק כפי שהיא הגדירה אותו
+    function generateCSV() {
+        const raw_data = jsPsych.data.get().values();
+        let csv_rows = [];
+        const headers = ["run_number", "subject_id", "first_block", "block_type", "rule", "trial_in_block", "repetition", "problem_id", "ref_side", "target_lottery", "ref_val1", "ref_prob1", "ref_val2", "ref_prob2", "tgt_val1", "tgt_prob1", "tgt_val2", "tgt_prob2", "response", "rt_sec", "won_bonus", "bonus_amount", "screened_out", "prolific_pid", "study_id", "session_id", "total_bonus"];
+        csv_rows.push(headers.join(','));
+        const run_num = runNumber;
+        const global_props = jsPsych.data.get().values()[0] || {};
+        const subject_id = global_props.subject_id || "UNKNOWN";
+        const first_b = global_props.first_block || "UNKNOWN";
+        const won_bonus = global_props.won_bonus !== undefined ? global_props.won_bonus : false;
+        const bonus_amount = global_props.bonus_amount !== undefined ? global_props.bonus_amount : 0;
+        const is_screened_out = (cc1_fails >= 2 || cc2_fails >= 2);
+
+        raw_data.forEach(trial => {
+            if (trial.block_type) { 
+                let response = trial.response;
+                if (trial.block_type === 'pairwise' || trial.block_type === 'instructed') {
+                    if (response === 0) response = 'Lottery 1';
+                    else if (response === 1) response = 'Lottery 2';
+                }
+                
+                let safe_problem_id = trial.problem_id !== undefined ? trial.problem_id : 'N/A';
+                let safe_target = trial.target_lottery !== undefined ? trial.target_lottery : 'N/A';
+                
+                let row = [
+                    run_num, subject_id, first_b, trial.block_type, trial.rule || 'N/A', trial.trial_in_block || 'N/A', trial.repetition || 'N/A', safe_problem_id, trial.ref_side || 'N/A', safe_target,
+                    trial.ref_val1 !== undefined ? trial.ref_val1 : 'N/A', 
+                    trial.ref_prob1 !== undefined ? trial.ref_prob1 : 'N/A', 
+                    trial.ref_val2 !== undefined ? trial.ref_val2 : 'N/A', 
+                    trial.ref_prob2 !== undefined ? trial.ref_prob2 : 'N/A', 
+                    trial.tgt_val1 !== undefined ? trial.tgt_val1 : 'N/A', 
+                    trial.tgt_prob1 !== undefined ? trial.tgt_prob1 : 'N/A', 
+                    trial.tgt_val2 !== undefined ? trial.tgt_val2 : 'N/A', 
+                    trial.tgt_prob2 !== undefined ? trial.tgt_prob2 : 'N/A',
+                    response, trial.rt ? (trial.rt / 1000).toFixed(2) : 'N/A', won_bonus, bonus_amount, is_screened_out, ids.prolific_pid, ids.study_id, ids.session_id, global_props.total_bonus || 0
+                ];
+                csv_rows.push(row.map(v => '"' + String(v).replaceAll('"', '""') + '"').join(','));
+            }
+        });
+        return csv_rows.join('\n');
+    }
+
+    const params = new URLSearchParams(location.search);
+    const subject_id = crypto.randomUUID();
+    const started = new Date().toISOString();
+    const runNumber = Date.now();
+    let consentGiven = false, consentTimestamp = '', finalizing = false, finished = '';
+    let saveQueue = Promise.resolve();
+    const ids = {prolific_pid: params.get('PROLIFIC_PID') || '',
+                 study_id: params.get('STUDY_ID') || '', session_id: params.get('SESSION_ID') || ''};
+    function snapshot(status = 'in_progress') {
+        const rows = jsPsych.data.get().values();
+        const props = rows[0] || {};
+        return {participant_id: subject_id, ...ids, status, started, finished,
+            consent_given: consentGiven, consent_timestamp: consentTimestamp,
+            first_block: stage1_order, cc1_fails, cc2_fails,
+            won_bonus: props.won_bonus || false, bonus_amount: props.bonus_amount || 0,
+            endowment: props.won_bonus ? 5 : 0, total_bonus: props.total_bonus || 0,
+            csv: generateCSV(), trials: JSON.parse(JSON.stringify(rows))};
+    }
+    async function requestJSON(url, options = {}) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 20000);
+        try {
+            const response = await fetch(url, {...options, signal: controller.signal, cache: 'no-store'});
+            if (!response.ok) throw new Error('Server request failed');
+            const result = await response.json();
+            if (!result.ok) throw new Error('Save not confirmed');
+            return result;
+        } finally { clearTimeout(timer); }
+    }
+    function enqueueSave(payload) {
+        const task = saveQueue.catch(() => {}).then(() => requestJSON('/api/save', {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)}));
+        saveQueue = task;
+        return task;
+    }
+    async function finalize() {
+        if (!consentGiven || finalizing) return;
+        finalizing = true;
+        if (!finished) finished = new Date().toISOString();
+        const status = cc1_fails >= 2 || cc2_fails >= 2 ? 'screened_out' : 'complete';
+        const display = jsPsych.getDisplayElement();
+        display.innerHTML = '<div class="instructions"><h2>Saving your responses…</h2><p>Please keep this page open.</p></div>';
+        try {
+            await enqueueSave(snapshot(status));
+            const saved = await requestJSON('/api/verify?participant_id=' + encodeURIComponent(subject_id));
+            if (saved.status !== status || (status === 'complete' && saved.decisions_completed !== 150))
+                throw new Error('Verification failed');
+            const code = (window.PILOT_CONFIG || {})[status === 'complete' ? 'SUCCESS_CODE' : 'SCREENOUT_CODE'];
+            if (params.get('preview') === '1' || !code) {
+                display.innerHTML = '<div class="instructions"><h2>Responses saved</h2><p>' +
+                    (status === 'screened_out' ? 'The study ended after the comprehension check.' : 'Thank you for completing the study.') +
+                    '</p><p>' + (params.get('preview') === '1' ? 'Preview finished; no Prolific redirect.' :
+                    'The return link is not configured. Please return to Prolific and contact the researcher.') + '</p></div>';
+            } else location.assign('https://app.prolific.com/submissions/complete?cc=' + encodeURIComponent(code));
+        } catch (error) {
+            finalizing = false;
+            display.innerHTML = '<div class="instructions"><h2>Your save has not been confirmed</h2><p>Please check your connection and retry without closing this page.</p><button id="retry-save">Retry saving</button></div>';
+            document.getElementById('retry-save').onclick = finalize;
+        }
+    }
+    const jsPsych = initJsPsych({
+        on_data_update: function() {
+            if (consentGiven && !finalizing) enqueueSave(snapshot()).catch(() => {});
+        },
+        on_finish: function() { if (consentGiven) finalize(); }
+    });
+    let stage1_order = Math.random() < 0.5 ? 'Pairwise_First' : 'BDM_First';
+    jsPsych.data.addProperties({subject_id, ...ids, first_block: stage1_order});
+
+    function getLotteryHTML(lottery, title) {
+        let win_prob_pct = lottery.prob;
+        let lose_prob_pct = 100 - lottery.prob;
+        return `
+        <div class="lottery-wrapper">
+            <div class="lottery-title">${title}</div>
+            <div class="bar-container">
+                <div class="bar-win" style="width: ${win_prob_pct}%;">${win_prob_pct > 0 ? '£'+lottery.win : ''}</div>
+                <div class="bar-lose" style="width: ${lose_prob_pct}%;">${lose_prob_pct > 0 ? '£'+lottery.lose : ''}</div>
+            </div>
+            <div class="prob-labels">
+                <span style="width: ${win_prob_pct}%; text-align: center;">${win_prob_pct > 0 ? win_prob_pct+'%' : ''}</span>
+                <span style="width: ${lose_prob_pct}%; text-align: center;">${lose_prob_pct > 0 ? lose_prob_pct+'%' : ''}</span>
+            </div>
+        </div>`;
+    }
+
+    const decision_problems = [
+        { id: 1, ref: { prob: 50, win: 0, lose: 20 }, target: { name: 'Target_1', prob: 0, win: 4, lose: 16 } },
+        { id: 2, ref: { prob: 50, win: 0, lose: 20 }, target: { name: 'Target_2', prob: 10, win: 10, lose: 10 } },
+        { id: 3, ref: { prob: 50, win: 0, lose: 20 }, target: { name: 'Target_3', prob: 20, win: 8, lose: 12 } },
+        { id: 4, ref: { prob: 50, win: 0, lose: 20 }, target: { name: 'Target_4', prob: 30, win: 6, lose: 14 } },
+        { id: 5, ref: { prob: 50, win: 0, lose: 20 }, target: { name: 'Target_5', prob: 60, win: 7, lose: 13 } },
+        { id: 6, ref: { prob: 25, win: 5, lose: 15 }, target: { name: 'Target_6', prob: 0, win: 7, lose: 13 } },
+        { id: 7, ref: { prob: 25, win: 5, lose: 15 }, target: { name: 'Target_7', prob: 10, win: 6, lose: 14 } },
+        { id: 8, ref: { prob: 25, win: 5, lose: 15 }, target: { name: 'Target_8', prob: 20, win: 8, lose: 12 } },
+        { id: 9, ref: { prob: 25, win: 5, lose: 15 }, target: { name: 'Target_9', prob: 30, win: 10, lose: 10 } },
+        { id: 10, ref: { prob: 25, win: 5, lose: 15 }, target: { name: 'Target_10', prob: 60, win: 4, lose: 16 } },
+        { id: 11, ref: { prob: 40, win: 15, lose: 5 }, target: { name: 'Target_11', prob: 0, win: 6, lose: 14 } },
+        { id: 12, ref: { prob: 40, win: 15, lose: 5 }, target: { name: 'Target_12', prob: 10, win: 8, lose: 12 } },
+        { id: 13, ref: { prob: 40, win: 15, lose: 5 }, target: { name: 'Target_13', prob: 20, win: 7, lose: 13 } },
+        { id: 14, ref: { prob: 40, win: 15, lose: 5 }, target: { name: 'Target_14', prob: 30, win: 4, lose: 16 } },
+        { id: 15, ref: { prob: 40, win: 15, lose: 5 }, target: { name: 'Target_15_FOSD', prob: 40, win: 12, lose: 2 } }
+    ];
+
+    const timeline = [];
+
+    timeline.push({
+        type: jsPsychHtmlButtonResponse,
+        stimulus: `
+            <div class="consent-box">
+                <h2 style="text-align: center;">INFORMED CONSENT FOR ONLINE RESEARCH</h2>
+                <p><strong>Preference Elicitation Methods: Online Pilot Study</strong></p>
+                <p><strong>Principal Investigator:</strong> Dr. Vered Kurtz-David, Bogen Family Department of Economics, Hebrew University of Jerusalem<br>
+                <strong>Contact:</strong> vered.kurtz@mail.huji.ac.il<br>
+                <strong>Participant eligibility:</strong> Adults age 18 or older who can complete the study in English</p>
+                
+                <p><strong>Purpose of the study</strong><br>
+                You are invited to take part in a research study about economic preferences and decision-making under risk. The purpose of this pilot study is to understand how different elicitation methods might generate different preference orderings and choices between lotteries.</p>
+                
+                <p><strong>What participation involves</strong><br>
+                If you agree to participate, you will complete the study online on a computer. You will first make decisions between pairs of lotteries using two methods: free binary choice and monetary valuation. Then, you will choose between the same lottery pairs under four explicitly instructed rules (for example, choosing the lottery with the highest expected value).</p>
+                
+                <p><strong>Duration</strong><br>
+                Your participation is expected to take approximately 40 minutes. The study is self-paced.</p>
+                
+                <p><strong>Risks or discomfort</strong><br>
+                This study involves no more than minimal risk. You may experience mild fatigue, frustration, or cognitive effort while evaluating lotteries and making decisions. You may stop participating at any time.</p>
+                
+                <p><strong>Benefits</strong><br>
+                There is no direct personal benefit from participating, other than compensation. The research may contribute to understanding how people form preferences and how those preferences are affected by different decision formats.</p>
+                
+                <p><strong>Compensation</strong><br>
+                You will receive a base payment of £8 for an approximately 40-minute session. In addition, ten percent of participants will be selected at random to receive an additional payment determined by one randomly selected trial, implementing their choice or lottery-switch valuation.</p>
+                
+                <p><strong>Confidentiality and data protection</strong><br>
+                The research team will not ask for your name, address, telephone number, or personal email address. The study may record your pseudonymous Prolific participant ID so that your submission can be linked to payment. Research data will be stored on password-protected, access-controlled Hebrew University research storage/computers and will be available only to authorized members of the research team. Results will be reported only in aggregated or de-identified form.</p>
+                
+                <p><strong>Voluntary participation and withdrawal</strong><br>
+                Your participation is voluntary. You may choose not to participate or may stop at any time without penalty by closing the study. Some responses are required for the computer task to continue; if you do not wish to answer a required item, you may end your participation instead. Stopping participation will not affect your rights on Prolific, subject to Prolific's standard payment rules and the study payment arrangements described above.</p>
+                
+                <hr>
+                <p><strong>Online consent</strong><br>
+                By selecting “I consent to participate” below, I confirm that I am at least 18 years old, that I have read and understood the information above, and that I voluntarily agree to participate in this study.</p>
+                
+                <p><strong>Questions or concerns</strong><br>
+                For questions about the study, please contact Dr. Vered Kurtz-David at vered.kurtz@mail.huji.ac.il. For questions or concerns about research ethics or your rights as a participant, you may contact the Faculty of Social Sciences Ethics Committee at ethics.social.science@mail.huji.ac.il.</p>
+            </div>
+        `,
+        choices: ['I consent to participate and wish to continue', 'I do not consent to participate'],
+        on_finish: function(data) { if(data.response === 1) jsPsych.endExperiment("You did not consent to participate. No research responses have been saved. Please return your submission on Prolific.");
+            else { consentGiven = true; consentTimestamp = new Date().toISOString(); } }
+    });
+
+    timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: `
+            <div class='instructions'>
+                <h2>Welcome to the experiment!</h2>
+                <p>The experiment consists of two parts. In this experiment, you will receive a base payment of <b>£8</b>.</p>
+                <p>At the end of the experiment, there is a <b>10% chance</b> that one of the questions you answered during the experiment will be selected for a bonus payment. If you are selected, we will play out the lottery based on your choice in that specific question.</p>
+                <p><b>Important note:</b> For the bonus payment, you will start with an additional £5. Depending on your decisions, you may spend some of this money or receive additional money. Whatever remains will be included in your bonus payment. Your guaranteed £8 participation payment will never be affected.</p>
+                <p>Because any question could be the one that determines your bonus, you should treat every decision as if it involves real money.</p>
+                <p>Press the <b>SPACE</b> bar to continue.</p>
+            </div>`,
+        choices: [' ']
+    });
+
+    function generateTrials(task_type, rule_id = null) {
+        let trials = [];
+        let num_reps = (task_type === 'instructed') ? 1 : 3;
+        let trial_count = 1;
+        
+        for (let rep = 1; rep <= num_reps; rep++) {
+            let sequence = jsPsych.randomization.shuffle([...decision_problems]);
+            let ref_side = Math.random() < 0.5 ? 'left' : 'right';
+
+            for (let i = 0; i < sequence.length; i++) {
+                let problem = sequence[i];
+                let base_data = {
+                    block_type: task_type, trial_in_block: trial_count++, repetition: rep, problem_id: problem.id, target_lottery: problem.target.name,
+                    ref_side: ref_side, ref_val1: problem.ref.win, ref_prob1: problem.ref.prob / 100, ref_val2: problem.ref.lose, ref_prob2: (100 - problem.ref.prob) / 100,
+                    tgt_val1: problem.target.win, tgt_prob1: problem.target.prob / 100, tgt_val2: problem.target.lose, tgt_prob2: (100 - problem.target.prob) / 100
+                };
+                if (rule_id) base_data.rule = rule_id;
+
+                if (task_type === 'pairwise' || task_type === 'instructed') {
+                    let left_lottery = ref_side === 'left' ? problem.ref : problem.target;
+                    let right_lottery = ref_side === 'left' ? problem.target : problem.ref;
+                    let stim = `
+                        <div style="display:flex; flex-direction:column; align-items:center;">
+                            <div class="container" style="margin-bottom: 0;">
+                                ${getLotteryHTML(left_lottery, 'Lottery 1')}
+                                ${getLotteryHTML(right_lottery, 'Lottery 2')}
+                            </div>
+                            <div class="custom-btn-container">
+                                <button class="custom-choice-btn" onclick="document.getElementById('jspsych-btn-0').click();">Choose Lottery 1</button>
+                                <button class="custom-choice-btn" onclick="document.getElementById('jspsych-btn-1').click();">Choose Lottery 2</button>
+                            </div>
+                        </div>`;
+                    trials.push({
+                        type: jsPsychHtmlButtonResponse,
+                        stimulus: stim,
+                        choices: ['0', '1'], 
+                        button_html: '<button id="jspsych-btn-%choice%" style="display:none;">%choice%</button>',
+                        data: base_data
+                    });
+                } else if (task_type === 'bdm') {
+                    base_data.ref_side = 'left'; 
+                    trials.push({
+                        type: jsPsychHtmlSliderResponse,
+                        prompt: "",
+                        stimulus: `
+                            <div style="display:flex; flex-direction:column; align-items:center; width: 100%;">
+                                <p style='font-size: 22px; font-weight:bold; margin-bottom: 10px; text-align: center; color: #333;'>
+                                    How much would you pay or need to receive to switch from Lottery 1 to Lottery 2?
+                                </p>
+                                <div class="container" style="margin-top: 10px; margin-bottom: 20px;">
+                                    ${getLotteryHTML(problem.ref, 'Lottery 1')}
+                                    ${getLotteryHTML(problem.target, 'Lottery 2')}
+                                </div>
+                                <div class='slider-value-display' style='margin-bottom: 25px;'>
+                                    Amount: <span id='slider_val_text'>£0.0</span>
+                                </div>
+                            </div>
+                        `,
+                        min: -5, max: 5, step: 0.1, slider_start: 0, require_movement: true,
+                        on_load: function() {
+                            const slider = document.querySelector('.jspsych-slider');
+                            const valDisplay = document.getElementById('slider_val_text');
+                            if(slider && valDisplay) {
+                                slider.addEventListener('input', function() {
+                                    let val = parseFloat(slider.value);
+                                    let sign = val < 0 ? '-' : (val > 0 ? '+' : '');
+                                    valDisplay.textContent = sign + '£' + Math.abs(val).toFixed(1);
+                                });
+                            }
+                            
+                            const wrapper = document.getElementById('jspsych-html-slider-response-wrapper');
+                            if(wrapper) {
+                                let ticksHTML = "<div style='width: calc(100% - 16px); margin: 0 auto; display: flex; justify-content: space-between; margin-top: -5px; color: #666; font-size: 12px;'>";
+                                for(let i = -5; i <= 5; i++) {
+                                    ticksHTML += `<span style="display: flex; flex-direction: column; align-items: center; width: 20px; margin-left: -10px; margin-right: -10px;">
+                                                    <span style="width: 2px; height: 8px; background-color: #999; margin-bottom: 2px;"></span>
+                                                    ${i}
+                                                  </span>`;
+                                }
+                                ticksHTML += "</div>";
+                                
+                                let labelsHTML = `
+                                    <div style='display: flex; justify-content: space-between; margin-top: 15px; font-weight: bold; font-size: 16px; width: 100%; text-align: center;'>
+                                        <span style='flex: 1; text-align: left;'>&larr; I pay to switch</span>
+                                        <span style='flex: 1; text-align: center; margin-top: -15px;'>
+                                            <div style='font-size: 22px; margin-bottom: -5px;'>&uarr;</div>
+                                            Switch for free
+                                        </span>
+                                        <span style='flex: 1; text-align: right;'>I get paid to switch &rarr;</span>
+                                    </div>
+                                `;
+                                wrapper.insertAdjacentHTML('beforeend', ticksHTML + labelsHTML);
+                            }
+                        },
+                        data: base_data
+                    });
+                }
+            }
+        }
+        return trials;
+    }
+
+    const pairwise_block = { timeline: [
+        { type: jsPsychHtmlKeyboardResponse, stimulus: `<div class='instructions'><h3>Part ${(stage1_order === 'Pairwise_First') ? '1' : '2'}</h3><p>In the following pages, you will face a series of choices between two lotteries: <b>Lottery 1</b> and <b>Lottery 2</b>.</p><p>Each lottery offers different prize amounts and different chances of winning.</p><p><b>Your task:</b><br>Simply look at the two options and click on the lottery you prefer to play if this lottery is chosen for payment at the end of the experiment.</p><p>Press the <b>SPACE</b> bar to begin.</p></div>`, choices: [' '] }
+    ].concat(generateTrials('pairwise')) };
+
+    const bdm_block = { timeline: [
+        { type: jsPsychHtmlKeyboardResponse, stimulus: `<div class='instructions'><h3>Part ${(stage1_order === 'BDM_First') ? '1' : '2'}</h3><h4>Switching Between Lotteries</h4><p>You start with Lottery 1.</p><p>Use the slider to tell us how much money you would pay, or need to receive, to switch to Lottery 2.</p><ul><li><b>Negative amount (e.g., −£2.0):</b> You are willing to pay up to £2 to switch.</li><li><b>Zero (£0):</b> You are willing to switch for free.</li><li><b>Positive amount (e.g., +£4.0):</b> You want to receive at least £4 to switch.</li></ul><h4>What happens next?</h4><p>The computer randomly selects a price between −£5 and +£5.</p><p>If the computer's price is equal to or higher than your price, you switch to Lottery 2.</p><p>Otherwise, you keep Lottery 1.</p><p><b>Important:</b> If you switch, you pay or receive the computer's price, not the amount you entered.</p><h4>Examples</h4><ul><li>You enter −£5.0, and the computer draws −£2.0. You switch to Lottery 2 and pay £2.</li><li>You enter +£1.0, and the computer draws +£3.0. You switch to Lottery 2 and receive £3.</li></ul><p>Your best strategy is to enter the amount that truly reflects what switching is worth to you.</p><p>Press the <b>SPACE</b> bar to begin.</p></div>`, choices: [' '] },
+        
+        // COMPREHENSION CHECK 1
+        { timeline: [
+            { 
+                type: jsPsychHtmlButtonResponse, 
+                stimulus: `<div class='instructions'><h3>Comprehension Check 1</h3><p>Suppose you state a price of <b>−£4.5</b>.</p><p>The computer draws a price of <b>−£3.0</b>.</p><p>Do you switch to Lottery 2, and how much do you pay or receive?</p></div>`, 
+                choices: ['I do NOT switch, and pay £0.', 'I switch to Lottery 2, and pay £4.5.', 'I switch to Lottery 2, and pay £3.0.'], 
+                data: { block_type: 'comp_check', question_id: 1 },
+                on_finish: function(data) {
+                    if (data.response !== 2) {
+                        cc1_fails++;
+                    }
+                }
+            },
+            { 
+                type: jsPsychHtmlButtonResponse, 
+                stimulus: function() { 
+                    if (jsPsych.data.get().last(1).values()[0].response === 2) {
+                        return "<div class='instructions'><h3 style='color:green;'>Correct!</h3><p>Because the computer's price (−£3) is equal to or higher than your stated price (−£4.5), you switch to Lottery 2 and pay the computer's price (£3).</p></div>";
+                    }
+                    if (cc1_fails >= 2) {
+                        return "<div class='instructions'><h3 style='color:red;'>Incorrect.</h3><p>You have failed the comprehension check twice. The experiment will now end.</p></div>";
+                    }
+                    return "<div class='instructions'><h3 style='color:red;'>Incorrect.</h3><p>Let's review: The computer drew −£3, which is higher than −£4.5 (asks you to pay less). Therefore, you switch to Lottery 2 and pay £3.</p></div>"; 
+                }, 
+                choices: ['Continue'],
+                on_finish: function() {
+                    if (cc1_fails >= 2) {
+                        jsPsych.endExperiment("You did not pass the comprehension check. Thank you for your time. Your responses will now be saved.");
+                    }
+                }
+            }
+        ], loop_function: function() { return jsPsych.data.get().last(2).values()[0].response !== 2 && cc1_fails < 2; } },
+        
+        // COMPREHENSION CHECK 2
+        { timeline: [
+            { 
+                type: jsPsychHtmlButtonResponse, 
+                stimulus: `<div class='instructions'><h3>Comprehension Check 2</h3><p>Suppose you state a price of <b>+£2.0</b>.</p><p>The computer draws a price of <b>+£4.0</b>.</p><p>Do you switch to Lottery 2, and how much do you pay or receive?</p></div>`, 
+                choices: ['I do NOT switch, and get £0.', 'I switch to Lottery 2, and receive £4.0.', 'I switch to Lottery 2, and receive £2.0.'], 
+                data: { block_type: 'comp_check', question_id: 2 },
+                on_finish: function(data) {
+                    if (data.response !== 1) {
+                        cc2_fails++;
+                    }
+                }
+            },
+            { 
+                type: jsPsychHtmlButtonResponse, 
+                stimulus: function() { 
+                    if (jsPsych.data.get().last(1).values()[0].response === 1) {
+                        return "<div class='instructions'><h3 style='color:green;'>Correct!</h3><p>Because the computer's price (+£4) is equal to or higher than your stated price (+£2), you switch to Lottery 2 and receive the computer's price (£4).</p></div>";
+                    }
+                    if (cc2_fails >= 2) {
+                        return "<div class='instructions'><h3 style='color:red;'>Incorrect.</h3><p>You have failed the comprehension check twice. The experiment will now end.</p></div>";
+                    }
+                    return "<div class='instructions'><h3 style='color:red;'>Incorrect.</h3><p>Let's review: The computer drew +£4, which is higher than +£2 (offers you more). Therefore, you switch to Lottery 2 and receive £4.</p></div>"; 
+                }, 
+                choices: ['Continue'],
+                on_finish: function() {
+                    if (cc2_fails >= 2) {
+                        jsPsych.endExperiment("You did not pass the comprehension check. Thank you for your time. Your responses will now be saved.");
+                    }
+                }
+            }
+        ], loop_function: function() { return jsPsych.data.get().last(2).values()[0].response !== 1 && cc2_fails < 2; } }
+    ].concat(generateTrials('bdm')) };
+
+    timeline.push(stage1_order === 'Pairwise_First' ? pairwise_block : bdm_block);
+    timeline.push(stage1_order === 'Pairwise_First' ? bdm_block : pairwise_block);
+
+    timeline.push({ type: jsPsychHtmlKeyboardResponse, stimulus: `<div class='instructions'><p>In this part of the experiment, we will ask you to choose according to a specific rule.</p><p>Press the <b>SPACE</b> bar to continue.</p></div>`, choices: [' '] });
+
+    const rule_data = [
+        {id: 'highest_payoff', text: 'Choose the lottery with the <b>highest possible payoff</b>.', ex: 'For example: If Lottery A pays £20 or £0, and Lottery B pays £15 or £5, the highest possible payoff is £20, so you should choose Lottery A.'},
+        {id: 'expected_value', text: 'Choose the lottery with the <b>highest expected value</b>.', ex: 'For example, suppose Lottery A has a 50% chance for £100 and a 50% chance for £0 (Expected value = £50). Suppose Lottery B has a 100% chance for £40 (Expected value = £40). You should choose Lottery A because its expected value (£50) is higher.'},
+        {id: 'highest_probability', text: 'Choose the lottery where the <b>high payoff has the highest winning probability</b>.', ex: 'For example: If Lottery A has a 20% chance to win its high payoff (£20) and Lottery B has a 30% chance to win its high payoff (£15), you should choose Lottery B because 30% is greater than 20%.'},
+        {id: 'maximin', text: 'Choose the lottery with the <b>higher minimum possible payoff</b>.', ex: 'For example: If Lottery A pays £0 or £20 (minimum is £0) and Lottery B pays £5 or £15 (minimum is £5), the higher minimum is £5, so you should choose Lottery B.'}
+    ];
+    let shuffled_rules = jsPsych.randomization.shuffle(rule_data);
+    let instructed_rules = [];
+    for (let i = 0; i < shuffled_rules.length; i++) {
+        let rule = shuffled_rules[i];
+        let intro_text = (i === 0) ? "<p>In the first series of decision problems, you will be asked to choose according to the following rule:</p>" : "<p>Ok, now we are changing the choice rule. In the next part choose according to:</p>";
+        instructed_rules.push({ timeline: [
+            { type: jsPsychHtmlKeyboardResponse, stimulus: `<div class='instructions'>${intro_text}<p>${rule.text}</p><p><i>${rule.ex}</i></p><p>Press the <b>SPACE</b> bar to begin.</p></div>`, choices: [' '] }
+        ].concat(generateTrials('instructed', rule.id)) });
+    }
+    timeline.push({ timeline: instructed_rules });
+
+    timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: "<div class='instructions'><h2>Calculating your results...</h2></div>",
+        choices: "NO_KEYS",
+        trial_duration: 2000,
+        on_finish: function() {
+            let all_trials = jsPsych.data.get().filterCustom(function(t){ return t.block_type && t.block_type !== 'comp_check'; }).values();
+            let won_bonus = Math.random() < 0.10;
+            let bonus_amount = 0;
+            if (won_bonus && all_trials.length > 0) {
+                let ct = all_trials[Math.floor(Math.random() * all_trials.length)];
+                if (ct.block_type === 'pairwise' || ct.block_type === 'instructed') {
+                    let selected_left = ct.response === 0;
+                    let played = (ct.ref_side === 'left' && selected_left) || (ct.ref_side === 'right' && !selected_left) ? 
+                        { val1: ct.ref_val1, prob1: ct.ref_prob1, val2: ct.ref_val2, name: "Reference Lottery" } : 
+                        { val1: ct.tgt_val1, prob1: ct.tgt_prob1, val2: ct.tgt_val2, name: "Target Lottery" };
+                    bonus_amount = (Math.random() < played.prob1) ? played.val1 : played.val2;
+                    bonus_summary_html = `<b>Congratulations! You won the 10% bonus draw!</b><br><br>The computer selected a trial from the <strong>${ct.block_type}</strong> phase.<br>You chose the <strong>${played.name}</strong>.<br>The outcome of the lottery was: <strong>£${bonus_amount}</strong>.<br><br>Adding your £5 endowment, your total bonus is <strong>£${(bonus_amount + 5).toFixed(2)}</strong>.`;
+                } else if (ct.block_type === 'bdm') {
+                    let comp_price = parseFloat((Math.random() * 10 - 5).toFixed(1));
+                    if (comp_price >= ct.response) {
+                        let lot_payoff = (Math.random() < ct.tgt_prob1) ? ct.tgt_val1 : ct.tgt_val2;
+                        bonus_amount = lot_payoff + comp_price;
+                        bonus_summary_html = `<b>Congratulations! You won the 10% bonus draw!</b><br><br>The computer selected a trial from the <strong>Valuation (BDM)</strong> phase.<br>Your price: <strong>£${ct.response.toFixed(1)}</strong>. Computer price: <strong>£${comp_price.toFixed(1)}</strong>.<br>The switch occurred. You played Lottery 2 (outcome £${lot_payoff}) and received/paid the computer price. Total from trial: £${bonus_amount.toFixed(1)}.<br><br>Adding your £5 endowment, your total bonus is <strong>£${(bonus_amount + 5).toFixed(2)}</strong>.`;
+                    } else {
+                        let lot_payoff = (Math.random() < ct.ref_prob1) ? ct.ref_val1 : ct.ref_val2;
+                        bonus_amount = lot_payoff;
+                        bonus_summary_html = `<b>Congratulations! You won the 10% bonus draw!</b><br><br>The computer selected a trial from the <strong>Valuation (BDM)</strong> phase.<br>Your price: <strong>£${ct.response.toFixed(1)}</strong>. Computer price: <strong>£${comp_price.toFixed(1)}</strong>.<br>The switch did NOT occur. You played Lottery 1 (outcome £${lot_payoff}).<br><br>Adding your £5 endowment, your total bonus is <strong>£${(bonus_amount + 5).toFixed(2)}</strong>.`;
+                    }
+                }
+            } else {
+                bonus_summary_html = "You did not win the 10% bonus draw this time. You will receive your guaranteed base payment of <b>£8</b>.";
+            }
+            jsPsych.data.addProperties({ won_bonus: won_bonus, bonus_amount: bonus_amount.toFixed(2), total_bonus: won_bonus ? (bonus_amount + 5).toFixed(2) : "0.00" });
+        }
+    });
+
+    timeline.push({ type: jsPsychHtmlKeyboardResponse, stimulus: function() { return `<div class='instructions'><h2>Bonus Draw Results</h2><p>${bonus_summary_html}</p><p>Press the <b>SPACE</b> bar to conclude the experiment.</p></div>`; }, choices: [' '] });
+
+    const preview = params.get('preview') === '1';
+    const config = window.PILOT_CONFIG || {};
+    if (!preview && (!config.SUCCESS_CODE || !config.SCREENOUT_CODE)) {
+        document.body.innerHTML = '<p style="padding:40px">This study is not open yet. The researcher needs to configure its Prolific completion codes.</p>';
+    } else if (!preview && (!ids.prolific_pid || !ids.study_id || !ids.session_id)) {
+        document.body.innerHTML = '<p style="padding:40px">Please open this study using the link provided by Prolific.</p>';
+    } else jsPsych.run(timeline);
+</script>
+</body>
+</html>
