@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, quote
 
 ROOT = Path(__file__).resolve().parent
 INDEX = (ROOT / 'index.html').read_text(encoding='utf-8')
@@ -171,7 +171,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_bytes(body,'text/html; charset=utf-8')
         if u.path=='/researcher':
             if not authorized(q): return self.send_bytes(b'Forbidden',status=403)
-            token=(q.get('token') or [''])[0]
+            token=quote((q.get('token') or [''])[0], safe='')
             rows=submission_list()
             esc=lambda x: str(x).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;').replace('\"','&quot;')
             trs=''.join(
