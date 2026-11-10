@@ -230,15 +230,27 @@
             <div class="consent-box">
                 <h2 style="text-align: center;">INFORMED CONSENT FOR ONLINE RESEARCH</h2>
                 <p><strong>Preference Elicitation Methods: Online Pilot Study</strong></p>
-                <p><strong>Principal Investigator:</strong> Dr. Vered Kurtz-David, Hebrew University of Jerusalem</p>
+                <p><strong>Principal Investigator:</strong> Dr. Vered Kurtz-David, Bogen Family Department of Economics, Hebrew University of Jerusalem</p>
+                <p><strong>Contact:</strong> vered.kurtz@mail.huji.ac.il</p>
+                <p><strong>Participant eligibility:</strong> Adults age 18 or older who can complete the study in English</p>
                 <p><strong>Purpose of the study</strong><br>
                 You are invited to take part in a research study about economic preferences and decision-making under risk.</p>
                 <p><strong>What participation involves</strong><br>
-                If you agree to participate, you will complete the study online on a computer. You will first make decisions between pairs of lotteries using two methods: free binary choice and monetary valuation. Then, you will choose between the same lottery pairs under four explicitly instructed rules.</p>
+                If you agree to participate, you will complete the study online on a computer. You will first make decisions between pairs of lotteries using two methods: free binary choice and monetary valuation. Then, you will choose between the same lottery pairs under four explicitly instructed rules (for example, choosing the lottery with the highest expected value).</p>
                 <p><strong>Duration</strong><br>
-                Your participation is expected to take approximately 30-35 minutes.</p>
+                Your participation is expected to take approximately 40 minutes. The study is self-paced.</p>
+                <p><strong>Risks or discomfort</strong><br>
+                This study involves no more than minimal risk. You may experience mild fatigue, frustration, or cognitive effort while evaluating lotteries and making decisions. You may stop participating at any time.</p>
+                <p><strong>Benefits</strong><br>
+                There is no direct personal benefit from participating, other than compensation. The research may contribute to understanding how people form preferences and how those preferences are affected by different decision formats.</p>
                 <p><strong>Compensation</strong><br>
-                You will receive a base payment of £8 for participating. In addition, you are given £5 to use in the decision task. At the end of the experiment, one of your decisions will be randomly selected, and the corresponding lottery will be played. You have a 10% chance of being selected to receive the resulting bonus payment. Regardless of whether you are selected, you will receive the £8 participation payment.</p>
+                You will receive a base payment of £8 for an approximately 40-minute session. In addition, ten percent of participants will be selected at random to receive an additional payment determined by one randomly selected trial, implementing their choice or lottery-switch valuation.</p>
+                <p><strong>Confidentiality and data protection</strong><br>
+                The research team will not ask for your name, address, telephone number, or personal email address. The study may record your pseudonymous Prolific participant ID so that your submission can be linked to payment. Research data will be stored on password-protected, access-controlled Hebrew University research storage/computers and will be available only to authorized members of the research team. Results will be reported only in aggregated or de-identified form.</p>
+                <p><strong>Voluntary participation and withdrawal</strong><br>
+                Your participation is voluntary. You may choose not to participate or may stop at any time without penalty by closing the study. Some responses are required for the computer task to continue; if you do not wish to answer a required item, you may end your participation instead. Stopping participation will not affect your rights on Prolific, subject to Prolific's standard payment rules and the study payment arrangements described above.</p>
+                <p><strong>Questions or concerns</strong><br>
+                For questions about the study, please contact Dr. Vered Kurtz-David at vered.kurtz@mail.huji.ac.il. For questions or concerns about research ethics or your rights as a participant, you may contact the Faculty of Social Sciences Ethics Committee at ethics.social.science@mail.huji.ac.il.</p>
                 <hr>
                 <p><strong>Online consent</strong><br>
                 By selecting “I consent to participate” below, I confirm that I am at least 18 years old, that I have read and understood the information above, and that I voluntarily agree to participate in this study.</p>
@@ -377,6 +389,15 @@
                                 nextBtn.innerText = 'SUBMIT';
                                 nextBtn.style.display = 'none'; 
                                 
+                                // Create a fixed height wrapper to prevent jumping
+                                const actionWrapper = document.createElement('div');
+                                actionWrapper.style.minHeight = '100px';
+                                actionWrapper.style.display = 'flex';
+                                actionWrapper.style.flexDirection = 'column';
+                                actionWrapper.style.alignItems = 'center';
+                                actionWrapper.style.justifyContent = 'flex-start';
+                                actionWrapper.style.width = '100%';
+                                
                                 const confirmBtn = document.createElement('button');
                                 confirmBtn.innerText = 'Confirm Value';
                                 confirmBtn.className = 'jspsych-btn';
@@ -387,17 +408,20 @@
                                 summaryDiv.style.fontWeight = 'bold';
                                 summaryDiv.style.marginTop = '15px';
                                 summaryDiv.style.marginBottom = '15px';
-                                summaryDiv.style.display = 'none';
+                                summaryDiv.style.minHeight = '24px';
+                                summaryDiv.innerText = '';
                                 
-                                nextBtn.parentNode.insertBefore(confirmBtn, nextBtn);
-                                nextBtn.parentNode.insertBefore(summaryDiv, nextBtn);
+                                nextBtn.parentNode.insertBefore(actionWrapper, nextBtn);
+                                actionWrapper.appendChild(confirmBtn);
+                                actionWrapper.appendChild(nextBtn);
+                                actionWrapper.appendChild(summaryDiv);
                                 
                                 slider.addEventListener('input', function() {
                                     let val = parseFloat(slider.value);
                                     let sign = val < 0 ? '-' : (val > 0 ? '+' : '');
                                     valDisplay.textContent = sign + '£' + Math.abs(val).toFixed(1);
                                     
-                                    summaryDiv.style.display = 'none';
+                                    summaryDiv.innerText = '';
                                     nextBtn.style.display = 'none'; 
                                     confirmBtn.style.display = 'inline-block';
                                 });
@@ -410,7 +434,6 @@
                                     else summaryText = `I am willing to switch from Lottery 1 to Lottery 2 for free.`;
                                     
                                     summaryDiv.innerText = summaryText;
-                                    summaryDiv.style.display = 'block';
                                     
                                     confirmBtn.style.display = 'none';
                                     nextBtn.style.display = 'inline-block'; 
@@ -509,7 +532,12 @@
             }
         ], loop_function: function() { return jsPsych.data.get().last(2).values()[0].response !== 1 && cc2_fails < 2; } },
         
-        delayInstructionScreen(`<div class='instructions'><h3>Great!</h3><p>You have passed the comprehension checks. The valuation task will now begin.</p></div>`, 10)
+        delayInstructionScreen(`<div class='instructions'>
+            <h2 style="color: #0056b3;">Training Complete</h2>
+            <p>You have successfully passed the comprehension checks.</p>
+            <h3>The actual experiment is now beginning.</h3>
+            <p>Please remember that from this point forward, every decision you make could be the one selected for your real bonus payment.</p>
+        </div>`, 3)
     ].concat(generateTrials('bdm')) };
 
     timeline.push(stage1_order === 'Pairwise_First' ? pairwise_block : bdm_block);
@@ -520,7 +548,7 @@
     const rule_data = [
         {id: 'highest_payoff', instruction_text: 'Choose the lottery with the highest possible payoff', text: 'Choose the lottery with the <b>highest possible payoff</b>.', ex: 'For example: If Lottery A pays £20 or £0, and Lottery B pays £15 or £5, the highest possible payoff is £20, so you should choose Lottery A.'},
         {id: 'expected_value', instruction_text: 'Choose the lottery with the highest expected value', text: 'Choose the lottery with the <b>highest expected value</b>.', ex: 'For example, suppose Lottery A has a 50% chance for £100 and a 50% chance for £0 (Expected value = £50). Suppose Lottery B has a 100% chance for £40 (Expected value = £40). You should choose Lottery A because its expected value (£50) is higher.'},
-        {id: 'highest_probability', instruction_text: 'Choose the lottery where the high payoff has the highest winning probability', text: 'Choose the lottery where the <b>high payoff has the highest winning probability</b>.', ex: 'For example: If Lottery A has a 20% chance to win its high payoff (£20) and Lottery B has a 30% chance to win its high payoff (£15), you should choose Lottery B because 30% is greater than 20%.'},
+        {id: 'highest_probability', instruction_text: 'Choose the lottery where the high payoff has the highest winning probability', text: 'Choose the lottery where the <b>high payoff has the highest winning probability</b>.', ex: 'For example: If Lottery A has a 20% chance to win its high payoff (£20) and Lottery B has a 30% chance to win its high payoff (£15), you should choose Lottery B because 30% is greater than 20.'},
         {id: 'maximin', instruction_text: 'Choose the lottery with the higher minimum possible payoff', text: 'Choose the lottery with the <b>higher minimum possible payoff</b>.', ex: 'For example: If Lottery A pays £0 or £20 (minimum is £0) and Lottery B pays £5 or £15 (minimum is £5), the higher minimum is £5, so you should choose Lottery B.'}
     ];
     let shuffled_rules = jsPsych.randomization.shuffle(rule_data);
